@@ -1,3 +1,34 @@
+/* Menambahkan aturan global pada elemen html dan body */
+html, body {
+    /* 1. Nonaktifkan Fitur Scroll (Gulir Halaman) */
+    overflow: hidden;
+    height: 100%;
+    width: 100%;
+    position: fixed;
+
+    /* 2. Nonaktifkan Fitur Drag to Refresh (Tarik ke bawah untuk muat ulang di mobile) */
+    overscroll-behavior-y: contain;
+
+    /* 3. Nonaktifkan Fitur Pemilihan Teks / Tahan Lama Teks (Mencegah Copy-Paste & Pop-up) */
+    -webkit-user-select: none; /* Safari */
+    -ms-user-select: none;     /* IE 10 dan versi lama */
+    user-select: none;         /* Standar modern (Chrome, Firefox, Opera) */
+    
+    /* Tambahan pencegahan pemicu menu klik kanan/tahan lama di perangkat iOS */
+    -webkit-touch-callout: none; 
+}
+
+/* Mengizinkan input teks, angka, dan textarea tetap bisa diketik & dipilih kursornya */
+input[type="text"],
+input[type="number"],
+textarea {
+    -webkit-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+}
+
+/* Sisa kode CSS Anda yang lain (seperti :root, .container, dsb) tetap ditaruh di bawah ini... */
+
 /* Variabel Warna untuk Fitur Tema (Default Dark) */
 :root {
     --bg-body: #0f172a;
