@@ -1,5 +1,6 @@
 let isRunning = false;
 
+// Fungsi menampilkan log ke komponen konsol UI
 function logMessage(text, type = 'info') {
     const container = document.getElementById('log-container');
     const entry = document.createElement('div');
@@ -12,24 +13,16 @@ function logMessage(text, type = 'info') {
     container.scrollTop = container.scrollHeight;
 }
 
-function getFileUrl(file) {
-    return new Promise((resolve) => {
-        if (!file) return resolve(null);
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            resolve(e.target.result);
-        };
-        reader.readAsDataURL(file);
-    });
-}
-
+// Konversi nilai warna heksadesimal ke desimal integer
 function hexToDecimal(hexStr) {
     return parseInt(hexStr.replace("#", ""), 16);
 }
 
+// Fungsi utama penanganan eksekusi pengiriman
 async function startProcess() {
     if (isRunning) return;
 
+    // Mengambil nilai elemen input dari DOM HTML
     const webhookUrl = document.getElementById('webhook-url').value.trim();
     const contentOutside = document.getElementById('outside-content').value.trim();
     const title = document.getElementById('embed-title').value.trim();
@@ -53,65 +46,77 @@ async function startProcess() {
     button.disabled = true;
     button.innerText = "Proses Berjalan...";
 
-    let mainImageUrl = null;
-    if (mainImageFile) {
-        logMessage("Memproses file gambar utama...", "info");
-        mainImageUrl = await getFileUrl(mainImageFile);
-    }
-
-    let thumbnailUrl = null;
-    if (thumbnailFile) {
-        logMessage("Memproses file gambar mini (thumbnail)...", "info");
-        thumbnailUrl = await getFileUrl(thumbnailFile);
-    }
-
     const numericColor = hexToDecimal(hexColor);
-    logMessage(`Proses dimulai oleh ReyLan. Target eksekusi: ${count} kali.`, "info");
+    logMessage(`Proses dimulai oleh ReyLan. Menggunakan pengiriman Multipart FormData biner.`, "info");
 
     for (let i = 1; i <= count; i++) {
         if (!isRunning) break;
 
-        const payload = {
+        // Inisialisasi objek FormData baru untuk membungkus data biner berkas asli
+        const formData = new FormData();
+
+        // Menyusun kerangka objek skema embed sesuai dokumentasi Discord API
+        const payloadJson = {
             content: contentOutside || undefined,
             embeds: [{
                 title: title || undefined,
                 description: description || undefined,
                 color: numericColor,
-                image: mainImageUrl ? { url: mainImageUrl } : undefined,
-                thumbnail: thumbnailUrl ? { url: thumbnailUrl } : undefined,
                 footer: footerText ? { text: footerText } : undefined,
                 timestamp: new Date().toISOString()
             }]
         };
 
-        if (!contentOutside && !title && !description && !mainImageUrl && !thumbnailUrl && !footerText) {
-            payload.content = "Pengiriman otomatis terpicu.";
-            payload.embeds = undefined;
+        // Penanganan Validasi Berkas Gambar Utama (Besar)
+        if (mainImageFile) {
+            // Memasukkan berkas mentah ke FormData dengan nama unik 'main_img.png'
+            formData.append('files[0]', mainImageFile, 'main_img.png');
+            // Merujuk skema URL internal gambar ke nama berkas lampiran di atas
+            payloadJson.embeds[0].image = { url: 'attachment://main_img.png' };
         }
 
+        // Penanganan Validasi Berkas Gambar Mini (Thumbnail)
+        if (thumbnailFile) {
+            // Memasukkan berkas mentah ke FormData dengan nama unik 'thumb_img.png'
+            formData.append('files[1]', thumbnailFile, 'thumb_img.png');
+            // Merujuk skema URL internal thumbnail ke nama berkas lampiran di atas
+            payloadJson.embeds[0].thumbnail = { url: 'attachment://thumb_img.png' };
+        }
+
+        // Fallback proteksi jika seluruh kolom parameter dikosongkan total oleh pengguna
+        if (!contentOutside && !title && !description && !mainImageFile && !thumbnailFile && !footerText) {
+            payloadJson.content = "Pengiriman otomatis biner terpicu.";
+            payloadJson.embeds = undefined;
+        }
+
+        // Memasukkan seluruh paket konfigurasi JSON string ke dalam kolom 'payload_json' FormData
+        formData.append('payload_json', JSON.stringify(payloadJson));
+
         try {
+            // Kirim paket FormData langsung tanpa menyertakan manual header Content-Type
             const response = await fetch(webhookUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: formData
             });
 
             if (response.status === 204 || response.ok) {
-                logMessage(`[${i}/${count}] Paket data berhasil dikirim.`, "success");
+                logMessage(`[${i}/${count}] Paket data FormData berhasil dikirim.`, "success");
             } else if (response.status === 429) {
                 const rateLimitData = await response.json();
                 const waitTime = rateLimitData.retry_after || 1000;
                 logMessage(`[Pembatasan] Rate limit aktif. Menunggu ${waitTime}ms.`, "warn");
                 await new Promise(res => setTimeout(res, waitTime));
-                i--;
+                i--; // Ulang urutan indeks yang gagal karena terkena batasan limit
                 continue;
             } else {
-                logMessage(`[${i}/${count}] Gagal dikirim. Kode Status: ${response.status}`, "error");
+                const errorResponse = await response.text();
+                logMessage(`[${i}/${count}] Gagal dikirim. Kode Status: ${response.status}. Detail: ${errorResponse}`, "error");
             }
         } catch (err) {
-            logMessage(`[${i}/${count}] Gangguan Koneksi: ${err.message}`, "error");
+            logMessage(`[${i}/${count}] Gangguan Jaringan: ${err.message}`, "error");
         }
 
+        // Memberikan jeda waktu antar perulangan siklus pengiriman data
         if (i < count) {
             await new Promise(res => setTimeout(res, delay));
         }
